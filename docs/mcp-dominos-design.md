@@ -146,6 +146,12 @@ The following MCP actions will be supported:
         "type": "string",
         "description": "ID of the store to order from"
       },
+      "orderType": {
+        "type": "string",
+        "enum": ["delivery", "carryout"],
+        "description": "Type of order - delivery or carryout",
+        "default": "delivery"
+      },
       "customer": {
         "type": "object",
         "properties": {
@@ -153,12 +159,15 @@ The following MCP actions will be supported:
           "lastName": { "type": "string" },
           "email": { "type": "string" },
           "phone": { "type": "string" },
-          "address": { "type": "string" }
+          "address": {
+            "type": "string",
+            "description": "Full address for delivery orders, can be omitted for carryout"
+          }
         },
-        "required": ["firstName", "lastName", "phone", "address"]
+        "required": ["firstName", "lastName", "phone"]
       }
     },
-    "required": ["storeId", "customer"]
+    "required": ["storeId", "customer", "orderType"]
   }
 }
 ```
@@ -882,3 +891,268 @@ try {
 ```
 
 This detailed flow demonstrates how the MCP server acts as an intermediary between AI models and the Domino's API, handling all the complex interaction logic while providing a simple, consistent interface for the models to use.
+
+### 4.4 Carryout Order Flow Example
+
+Below is a detailed example of a carryout order flow, showing the key differences from the delivery flow.
+
+#### Step 1: Finding Nearby Stores
+
+**MCP Action Call**:
+
+```json
+{
+  "name": "findNearbyStores",
+  "parameters": {
+    "address": "2 Portola Plaza, Monterey, CA 93940"
+  }
+}
+```
+
+**Server-Side Processing**:
+
+```javascript
+// Create a new Address object
+const customerAddress = new Address("2 Portola Plaza, Monterey, CA 93940");
+
+// Find nearby stores
+const nearbyStores = await new NearbyStores(customerAddress);
+
+// Filter for open carryout stores and sort by distance
+const carryoutStores = nearbyStores.stores
+  .filter(
+    (store) =>
+      store.IsOnlineCapable && store.IsOpen && store.ServiceIsOpen.Carryout
+  )
+  .sort((a, b) => a.MinDistance - b.MinDistance);
+
+// Save to session state
+sessionState.stores = carryoutStores;
+```
+
+**MCP Response**:
+
+```json
+{
+  "stores": [
+    {
+      "storeID": "7890",
+      "address": "200 Del Monte Ave, Monterey, CA 93940",
+      "phone": "831-555-1234",
+      "isOpen": true,
+      "allowsDelivery": true,
+      "allowsCarryout": true,
+      "estimatedCarryoutTime": "15-20 min",
+      "distance": "1.2 miles"
+    },
+    ...
+  ]
+}
+```
+
+#### Step 2: Creating a Carryout Order
+
+**MCP Action Call**:
+
+```json
+{
+  "name": "createOrder",
+  "parameters": {
+    "storeId": "7890",
+    "orderType": "carryout",
+    "customer": {
+      "firstName": "Brandon",
+      "lastName": "Miller",
+      "email": "brandon@example.com",
+      "phone": "941-555-2368"
+      // Note: No address required for carryout
+    }
+  }
+}
+```
+
+**Server-Side Processing**:
+
+```javascript
+// Create customer object
+const customer = new Customer({
+  firstName: "Brandon",
+  lastName: "Miller",
+  email: "brandon@example.com",
+  phone: "941-555-2368",
+  // No address for carryout orders
+});
+
+// Create a new order for this customer
+const order = new Order(customer);
+
+// Set the store ID for the order
+order.storeID = "7890";
+
+// Set service method to carryout
+order.serviceMethod = "Carryout";
+
+// Generate a unique order ID for session tracking
+const orderId = `order-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
+// Save to session state
+sessionState.orders[orderId] = order;
+```
+
+**MCP Response**:
+
+```json
+{
+  "orderId": "order-1712837642-123",
+  "status": "created",
+  "orderType": "carryout",
+  "customer": {
+    "firstName": "Brandon",
+    "lastName": "Miller"
+  },
+  "store": {
+    "storeId": "7890",
+    "address": "200 Del Monte Ave, Monterey, CA 93940"
+  }
+}
+```
+
+#### Step 3: Adding Items to Order
+
+This step is identical to the delivery flow.
+
+#### Step 4: Validating and Pricing the Order
+
+The validation and pricing steps are similar to the delivery flow, but with no delivery fee in the pricing breakdown.
+
+**MCP Response for Pricing**:
+
+```json
+{
+  "orderId": "order-1712837642-123",
+  "status": "priced",
+  "pricing": {
+    "subTotal": 13.99,
+    "tax": 1.15,
+    "total": 15.14
+    // Note: No delivery fee for carryout orders
+  }
+}
+```
+
+#### Step 5: Placing the Carryout Order
+
+**MCP Action Call**:
+
+```json
+{
+  "name": "placeOrder",
+  "parameters": {
+    "orderId": "order-1712837642-123",
+    "payment": {
+      "type": "credit",
+      "cardNumber": "4100123422343234",
+      "expiration": "01/28",
+      "securityCode": "123",
+      "postalCode": "93940"
+      // Note: No tip for carryout orders
+    }
+  }
+}
+```
+
+**Server-Side Processing**:
+
+```javascript
+// Get the order from session state
+const order = sessionState.orders[orderId];
+
+// Create payment object
+const payment = new Payment({
+  amount: order.amountsBreakdown.customer,
+  number: "4100123422343234",
+  expiration: "01/28",
+  securityCode: "123",
+  postalCode: "93940",
+  // No tip for carryout orders
+});
+
+// Add payment to order
+order.payments.push(payment);
+
+try {
+  // Place the order with Domino's API
+  await order.place();
+
+  // Extract order confirmation details
+  const confirmation = {
+    orderID: order.orderID,
+    estimatedWaitMinutes: order.estimatedWaitMinutes,
+    status: order.status,
+    storeAddress: order.storeAddress,
+  };
+
+  // For carryout orders, include pickup instructions
+  confirmation.pickupInstructions =
+    "Please bring your order confirmation and payment card for verification.";
+  confirmation.readyTime = new Date(
+    Date.now() + order.estimatedWaitMinutes * 60000
+  ).toLocaleTimeString();
+
+  sessionState.orderConfirmation = confirmation;
+} catch (error) {
+  sessionState.orderErrors = error;
+}
+```
+
+**MCP Response**:
+
+```json
+{
+  "orderId": "order-1712837642-123",
+  "status": "placed",
+  "orderType": "carryout",
+  "confirmation": {
+    "dominosOrderId": "ABC123XYZ",
+    "estimatedReadyTime": "5:45 PM",
+    "orderStatus": "In Preparation",
+    "pickupLocation": "200 Del Monte Ave, Monterey, CA 93940",
+    "pickupInstructions": "Please bring your order confirmation and payment card for verification."
+  }
+}
+```
+
+#### Step 6: Tracking the Carryout Order
+
+The tracking functionality is similar to delivery orders, but with carryout-specific status information.
+
+**MCP Response**:
+
+```json
+{
+  "status": "Ready for Pickup",
+  "estimatedReadyTime": "Ready now",
+  "orderDetails": {
+    "items": ["Large Hand Tossed Pizza"],
+    "placedAt": "2025-04-11T15:30:00Z"
+  },
+  "tracker": {
+    "orderPlaced": true,
+    "preparation": true,
+    "baking": true,
+    "qualityCheck": true,
+    "readyForPickup": true,
+    "pickedUp": false
+  },
+  "pickupLocation": "200 Del Monte Ave, Monterey, CA 93940"
+}
+```
+
+This carryout flow demonstrates the key differences when handling carryout orders compared to delivery orders, including:
+
+1. No delivery address required when creating the order
+2. Setting the service method to "Carryout" in the Domino's API
+3. No delivery fees in the pricing structure
+4. No tip amount in the payment process
+5. Different tracking statuses (ready for pickup vs. out for delivery)
+6. Additional pickup-specific instructions and information
