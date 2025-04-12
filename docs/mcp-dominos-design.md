@@ -358,3 +358,527 @@ The MCP server is designed to work with AI models by providing:
 5. Model validates and prices order
 6. Model collects payment information and places order
 7. Model provides tracking information
+
+### 4.3 Detailed Pizza Ordering Flow Example
+
+Below is a detailed example flow showing the exact sequence of MCP action calls, server-side state management, and corresponding Domino's package API calls for a complete pizza ordering process.
+
+#### Step 1: Finding Nearby Stores
+
+**MCP Action Call**:
+
+```json
+{
+  "name": "findNearbyStores",
+  "parameters": {
+    "address": "2 Portola Plaza, Monterey, CA 93940"
+  }
+}
+```
+
+**Server-Side Processing**:
+
+1. Create Address object using the dominos package
+2. Query for nearby stores
+3. Save store information to session state
+
+**Dominos Package Calls**:
+
+```javascript
+// Create a new Address object
+const customerAddress = new Address("2 Portola Plaza, Monterey, CA 93940");
+
+// Find nearby stores
+const nearbyStores = await new NearbyStores(customerAddress);
+
+// Filter for open delivery stores and sort by distance
+const deliveryStores = nearbyStores.stores
+  .filter(
+    (store) =>
+      store.IsOnlineCapable &&
+      store.IsDeliveryStore &&
+      store.IsOpen &&
+      store.ServiceIsOpen.Delivery
+  )
+  .sort((a, b) => a.MinDistance - b.MinDistance);
+
+// Save to session state
+sessionState.stores = deliveryStores;
+```
+
+**MCP Response**:
+
+```json
+{
+  "stores": [
+    {
+      "storeID": "7890",
+      "address": "200 Del Monte Ave, Monterey, CA 93940",
+      "phone": "831-555-1234",
+      "isOpen": true,
+      "allowsDelivery": true,
+      "allowsCarryout": true,
+      "estimatedDeliveryTime": "25-35 min",
+      "distance": "1.2 miles"
+    },
+    ...
+  ]
+}
+```
+
+#### Step 2: Browsing the Menu
+
+**MCP Action Call**:
+
+```json
+{
+  "name": "getMenu",
+  "parameters": {
+    "storeId": "7890"
+  }
+}
+```
+
+**Server-Side Processing**:
+
+1. Retrieve store from session state
+2. Fetch menu using the dominos package
+3. Format menu items for easy browsing
+4. Save menu to session state
+
+**Dominos Package Calls**:
+
+```javascript
+// Fetch the full menu for the selected store
+const menu = await new Menu(sessionState.selectedStoreId);
+
+// Process menu categories for easier browsing
+const processedMenu = {
+  pizzas: menu.getFoodCategory("Pizza"),
+  sides: menu.getFoodCategory("Sides"),
+  drinks: menu.getFoodCategory("Drinks"),
+  desserts: menu.getFoodCategory("Dessert"),
+};
+
+// Save to session state
+sessionState.menu = processedMenu;
+```
+
+**MCP Response**:
+
+```json
+{
+  "categories": [
+    {
+      "name": "Pizzas",
+      "items": [
+        {
+          "code": "16SCREEN",
+          "name": "Large Hand Tossed Pizza",
+          "description": "Hand Tossed Pizza with a rich, buttery taste",
+          "basePrice": 13.99,
+          "options": {
+            "toppings": ["CHEESE", "PEPPERONI", "SAUSAGE", ...],
+            "crusts": ["HANDTOSS", "THIN", "PAN", ...],
+            "sauces": ["TOMATO", "MARINARA", "BBQ", ...]
+          }
+        },
+        ...
+      ]
+    },
+    ...
+  ]
+}
+```
+
+#### Step 3: Creating an Order
+
+**MCP Action Call**:
+
+```json
+{
+  "name": "createOrder",
+  "parameters": {
+    "storeId": "7890",
+    "customer": {
+      "firstName": "Brandon",
+      "lastName": "Miller",
+      "email": "brandon@example.com",
+      "phone": "941-555-2368",
+      "address": "2 Portola Plaza, Monterey, CA 93940"
+    }
+  }
+}
+```
+
+**Server-Side Processing**:
+
+1. Create a Customer object
+2. Create a new Order associated with the customer
+3. Set the store ID
+4. Generate and save an order ID for session tracking
+5. Save order to session state
+
+**Dominos Package Calls**:
+
+```javascript
+// Create customer object
+const customer = new Customer({
+  firstName: "Brandon",
+  lastName: "Miller",
+  email: "brandon@example.com",
+  phone: "941-555-2368",
+  address: "2 Portola Plaza, Monterey, CA 93940",
+});
+
+// Create a new order for this customer
+const order = new Order(customer);
+
+// Set the store ID for the order
+order.storeID = "7890";
+
+// Generate a unique order ID for session tracking
+const orderId = `order-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
+// Save to session state
+sessionState.orders[orderId] = order;
+```
+
+**MCP Response**:
+
+```json
+{
+  "orderId": "order-1712837642-123",
+  "status": "created",
+  "customer": {
+    "firstName": "Brandon",
+    "lastName": "Miller",
+    "address": "2 Portola Plaza, Monterey, CA 93940"
+  }
+}
+```
+
+#### Step 4: Adding Items to Order
+
+**MCP Action Call**:
+
+```json
+{
+  "name": "addItemToOrder",
+  "parameters": {
+    "orderId": "order-1712837642-123",
+    "item": {
+      "code": "16SCREEN",
+      "options": {
+        "C": { "1/1": "1.5" }, // Extra cheese on whole pizza
+        "P": { "1/2": "1.5" }, // Double pepperoni on half
+        "X": { "1/1": "1" } // Normal sauce on whole pizza
+      },
+      "quantity": 1
+    }
+  }
+}
+```
+
+**Server-Side Processing**:
+
+1. Retrieve order from session state
+2. Create a new Item using the dominos package
+3. Add item to the order
+4. Save updated order to session state
+
+**Dominos Package Calls**:
+
+```javascript
+// Get the order from session state
+const order = sessionState.orders[orderId];
+
+// Create a new pizza item
+const pizza = new Item({
+  code: "16SCREEN",
+  options: {
+    C: { "1/1": "1.5" }, // Extra cheese on whole pizza
+    P: { "1/2": "1.5" }, // Double pepperoni on half
+    X: { "1/1": "1" }, // Normal sauce on whole pizza
+  },
+});
+
+// Add the item to the order
+order.addItem(pizza);
+
+// Update session state
+sessionState.orders[orderId] = order;
+```
+
+**MCP Response**:
+
+```json
+{
+  "orderId": "order-1712837642-123",
+  "status": "updated",
+  "items": [
+    {
+      "code": "16SCREEN",
+      "name": "Large Hand Tossed Pizza",
+      "options": {
+        "cheese": "Extra Cheese",
+        "toppings": "Double Pepperoni on Half",
+        "sauce": "Normal Tomato Sauce"
+      },
+      "quantity": 1
+    }
+  ]
+}
+```
+
+#### Step 5: Validating the Order
+
+**MCP Action Call**:
+
+```json
+{
+  "name": "validateOrder",
+  "parameters": {
+    "orderId": "order-1712837642-123"
+  }
+}
+```
+
+**Server-Side Processing**:
+
+1. Retrieve order from session state
+2. Call validate method on the order
+3. Update session state with validation results
+
+**Dominos Package Calls**:
+
+```javascript
+// Get the order from session state
+const order = sessionState.orders[orderId];
+
+try {
+  // Validate the order with Domino's API
+  await order.validate();
+  sessionState.orders[orderId] = order;
+  sessionState.orderStatus = "validated";
+} catch (error) {
+  sessionState.orderErrors = error;
+  sessionState.orderStatus = "validation_failed";
+}
+```
+
+**MCP Response**:
+
+```json
+{
+  "orderId": "order-1712837642-123",
+  "status": "validated",
+  "isValid": true
+}
+```
+
+#### Step 6: Pricing the Order
+
+**MCP Action Call**:
+
+```json
+{
+  "name": "priceOrder",
+  "parameters": {
+    "orderId": "order-1712837642-123"
+  }
+}
+```
+
+**Server-Side Processing**:
+
+1. Retrieve order from session state
+2. Call price method on the order
+3. Update session state with pricing information
+
+**Dominos Package Calls**:
+
+```javascript
+// Get the order from session state
+const order = sessionState.orders[orderId];
+
+try {
+  // Price the order with Domino's API
+  await order.price();
+
+  // Extract pricing breakdown
+  const pricing = {
+    subTotal: order.amountsBreakdown.menu,
+    tax: order.amountsBreakdown.tax,
+    delivery: order.amountsBreakdown.surcharge,
+    total: order.amountsBreakdown.customer,
+  };
+
+  sessionState.orderPricing = pricing;
+  sessionState.orders[orderId] = order;
+} catch (error) {
+  sessionState.orderErrors = error;
+}
+```
+
+**MCP Response**:
+
+```json
+{
+  "orderId": "order-1712837642-123",
+  "status": "priced",
+  "pricing": {
+    "subTotal": 13.99,
+    "tax": 1.15,
+    "delivery": 3.99,
+    "total": 19.13
+  }
+}
+```
+
+#### Step 7: Placing the Order
+
+**MCP Action Call**:
+
+```json
+{
+  "name": "placeOrder",
+  "parameters": {
+    "orderId": "order-1712837642-123",
+    "payment": {
+      "type": "credit",
+      "cardNumber": "4100123422343234",
+      "expiration": "01/28",
+      "securityCode": "123",
+      "postalCode": "93940",
+      "tipAmount": 3.5
+    }
+  }
+}
+```
+
+**Server-Side Processing**:
+
+1. Retrieve order from session state
+2. Create Payment object
+3. Add payment to order
+4. Call place method on the order
+5. Update session state with order confirmation
+
+**Dominos Package Calls**:
+
+```javascript
+// Get the order from session state
+const order = sessionState.orders[orderId];
+
+// Create payment object
+const payment = new Payment({
+  amount: order.amountsBreakdown.customer,
+  number: "4100123422343234",
+  expiration: "01/28",
+  securityCode: "123",
+  postalCode: "93940",
+  tipAmount: 3.5,
+});
+
+// Add payment to order
+order.payments.push(payment);
+
+try {
+  // Place the order with Domino's API
+  await order.place();
+
+  // Extract order confirmation details
+  const confirmation = {
+    orderID: order.orderID,
+    estimatedWaitMinutes: order.estimatedWaitMinutes,
+    status: order.status,
+  };
+
+  sessionState.orderConfirmation = confirmation;
+  sessionState.orders[orderId] = order;
+} catch (error) {
+  sessionState.orderErrors = error;
+}
+```
+
+**MCP Response**:
+
+```json
+{
+  "orderId": "order-1712837642-123",
+  "status": "placed",
+  "confirmation": {
+    "dominosOrderId": "ABC123XYZ",
+    "estimatedDeliveryTime": "30-40 minutes",
+    "orderStatus": "In Preparation"
+  }
+}
+```
+
+#### Step 8: Tracking the Order
+
+**MCP Action Call**:
+
+```json
+{
+  "name": "trackOrder",
+  "parameters": {
+    "phoneNumber": "941-555-2368",
+    "storeId": "7890"
+  }
+}
+```
+
+**Server-Side Processing**:
+
+1. Create a new Tracking instance
+2. Call the tracking by phone method
+3. Format tracking response for easy understanding
+
+**Dominos Package Calls**:
+
+```javascript
+// Create tracking object
+const tracking = new Tracking();
+
+try {
+  // Track order by phone number
+  const trackingResult = await tracking.byPhone("9415552368");
+
+  // Format tracking information
+  const orderStatus = {
+    status: trackingResult.OrderStatus,
+    estimatedDeliveryTime: trackingResult.EstimatedDeliveryTime,
+    orderDescription: trackingResult.OrderDescription,
+    deliveryAddress: trackingResult.Address,
+  };
+
+  sessionState.trackingInfo = orderStatus;
+} catch (error) {
+  sessionState.trackingErrors = error;
+}
+```
+
+**MCP Response**:
+
+```json
+{
+  "status": "Out for Delivery",
+  "estimatedDeliveryTime": "5-15 minutes",
+  "orderDetails": {
+    "items": ["Large Hand Tossed Pizza"],
+    "placedAt": "2025-04-11T15:30:00Z"
+  },
+  "tracker": {
+    "orderPlaced": true,
+    "preparation": true,
+    "baking": true,
+    "qualityCheck": true,
+    "outForDelivery": true,
+    "delivered": false
+  }
+}
+```
+
+This detailed flow demonstrates how the MCP server acts as an intermediary between AI models and the Domino's API, handling all the complex interaction logic while providing a simple, consistent interface for the models to use.
