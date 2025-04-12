@@ -1,0 +1,29 @@
+{
+  "name": "mcp-dominos-pizza",
+  "version": "1.0.0",
+  "description": "Model Context Protocol server for Domino's Pizza API integration",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test test"
+  },
+  "keywords": [
+    "mcp",
+    "dominos",
+    "pizza",
+    "api"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "dominos": "^3.3.1",
+    "uuid": "^9.0.1"
+  },
+  "bin": {
+    "mcp-dominos-pizza": "./src/index.js"
+  }
+}

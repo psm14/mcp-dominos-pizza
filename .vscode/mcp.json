@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "dominos": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${workspaceFolder}/src/index.js"]
+    }
+  }
+}
