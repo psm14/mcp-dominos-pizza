@@ -342,8 +342,8 @@ The following MCP actions will be supported:
 
 - Node.js v18+ runtime
 - dominos npm package v3.3.1
-- Jest for testing
-- Docker for containerization (optional)
+- Node.js native test runner for testing
+- To be run via `npx` command
 
 ## 4. Integration with Models
 
