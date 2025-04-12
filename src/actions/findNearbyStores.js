@@ -39,7 +39,9 @@ export async function findNearbyStores(params, sessionManager) {
         estimatedCarryoutTime: store.ServiceMethodEstimatedWaitMinutes?.Carryout
           ? `${store.ServiceMethodEstimatedWaitMinutes.Carryout.Min}-${store.ServiceMethodEstimatedWaitMinutes.Carryout.Max} min`
           : "Unknown",
-        distance: `${store.MinDistance.toFixed(1)} miles`,
+        ...(store.MinDistance !== undefined
+          ? { distance: `${store.MinDistance.toFixed(1)} miles` }
+          : {}),
       }))
       .sort((a, b) => parseFloat(a.distance) - parseFloat(b.distance));
 
