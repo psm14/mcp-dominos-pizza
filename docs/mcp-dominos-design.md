@@ -190,11 +190,11 @@ The following MCP actions will be supported:
         "properties": {
           "code": {
             "type": "string",
-            "description": "Menu code for the item"
+            "description": "Menu code for the item (e.g., '14SCREEN' for large hand tossed pizza)"
           },
           "options": {
             "type": "object",
-            "description": "Customization options for the item"
+            "description": "Customization options for the item using single-letter codes from Domino's menu toppings (see 'Topping and Option Codes' section)"
           },
           "quantity": {
             "type": "integer",
@@ -310,9 +310,95 @@ The following MCP actions will be supported:
 }
 ```
 
-## 3. Implementation Plan
+## 3. Topping and Option Codes
 
-### 3.1 Development Phases
+### 3.1 Understanding Domino's Topping Codes
+
+The Domino's API uses single-letter codes to represent toppings and customization options. These codes are found in the `menu.Toppings` section of the Domino's menu API response. Understanding these codes is essential for adding items to an order.
+
+### 3.2 Common Pizza Topping Codes
+
+Here are the most common topping codes for pizzas:
+
+| Code | Description                  | Type      |
+| ---- | ---------------------------- | --------- |
+| X    | Robust Inspired Tomato Sauce | Sauce     |
+| Xm   | Marinara Sauce               | Sauce     |
+| Xw   | White Sauce                  | Sauce     |
+| Bq   | BBQ Sauce                    | Sauce     |
+| C    | Cheese                       | Cheese    |
+| P    | Pepperoni                    | Meat      |
+| H    | Ham                          | Meat      |
+| B    | Beef                         | Meat      |
+| S    | Italian Sausage              | Meat      |
+| Du   | Philly Steak                 | Meat      |
+| K    | Bacon                        | Meat      |
+| Si   | Spinach                      | Vegetable |
+| M    | Mushroom                     | Vegetable |
+| O    | Onion                        | Vegetable |
+| G    | Green Peppers                | Vegetable |
+| R    | Roasted Red Peppers          | Vegetable |
+| J    | Jalapeño Peppers             | Vegetable |
+
+### 3.3 Portion and Quantity Format
+
+When specifying toppings, you need to define both the portion of the pizza and the quantity of the topping:
+
+#### Portion Format
+
+- `"1/1"`: The whole pizza
+- `"1/2"`: Half of the pizza
+- `"2/2"`: The other half of the pizza
+
+#### Quantity Values
+
+- `"0"`: None
+- `"0.5"`: Light amount
+- `"1"`: Normal amount
+- `"1.5"`: Extra amount
+- `"2"`: Double amount
+
+### 3.4 Example Options Object
+
+```javascript
+{
+  "options": {
+    "X": { "1/1": "1" },    // Normal tomato sauce on the whole pizza
+    "C": { "1/1": "1.5" },  // Extra cheese on the whole pizza
+    "P": { "1/2": "2" },    // Double pepperoni on the first half
+    "M": { "2/2": "1" }     // Normal mushrooms on the second half
+  }
+}
+```
+
+### 3.5 Finding Available Toppings
+
+For each product, the Domino's API provides `AvailableToppings` that lists the valid topping codes. For example, a standard pizza might have:
+
+```
+"AvailableToppings": "X=0:0.5:1:1.5,Xm=0:0.5:1:1.5,Bq,Xw=0:0.5:1:1.5,C,H,B,Sa,P,S,Du,K,Pm,Ht,F,J,O,Z,Td,R,M,N,Cp,E,G,Si,Rr,Fe,Cs,Xf=0:0.5:1:1.5,Rd"
+```
+
+This string indicates all valid toppings for the item along with the quantities allowed for each (when specified after an equals sign).
+
+### 3.6 Division of Responsibilities for Topping Codes
+
+#### LLM Client Responsibilities:
+
+1. Translate user-friendly descriptions ("extra cheese", "pepperoni on half") into the appropriate code format as documented in sections 3.2-3.4
+2. Provide properly formatted option codes when calling the `addItemToOrder` action
+
+#### MCP Server Responsibilities:
+
+1. Provide topping code information in the menu response for the LLM to reference
+2. Validate topping choices against the available toppings for the selected product
+3. Pass the properly formatted options to the Domino's API without modification
+
+This division ensures that the LLM can maintain contextual understanding of the user's requests while the MCP server focuses on API integration and validation.
+
+## 4. Implementation Plan
+
+### 4.1 Development Phases
 
 #### Phase 1: Core Infrastructure
 
@@ -345,9 +431,9 @@ The following MCP actions will be supported:
 - Node.js native test runner for testing
 - To be run via `npx` command
 
-## 4. Integration with Models
+## 5. Integration with Models
 
-### 4.1 Model Interactions
+### 5.1 Model Interactions
 
 The MCP server is designed to work with AI models by providing:
 
@@ -356,7 +442,7 @@ The MCP server is designed to work with AI models by providing:
 - Consistent response formats for easy parsing
 - Step-by-step guided workflows
 
-### 4.2 Example Conversation Flows
+### 5.2 Example Conversation Flows
 
 #### Simple Order Flow
 
@@ -368,7 +454,7 @@ The MCP server is designed to work with AI models by providing:
 6. Model collects payment information and places order
 7. Model provides tracking information
 
-### 4.3 Detailed Pizza Ordering Flow Example
+### 5.3 Detailed Pizza Ordering Flow Example
 
 Below is a detailed example flow showing the exact sequence of MCP action calls, server-side state management, and corresponding Domino's package API calls for a complete pizza ordering process.
 
@@ -487,16 +573,156 @@ sessionState.menu = processedMenu;
           "description": "Hand Tossed Pizza with a rich, buttery taste",
           "basePrice": 13.99,
           "options": {
-            "toppings": ["CHEESE", "PEPPERONI", "SAUSAGE", ...],
-            "crusts": ["HANDTOSS", "THIN", "PAN", ...],
-            "sauces": ["TOMATO", "MARINARA", "BBQ", ...]
+            "toppings": [
+              {
+                "name": "Cheese",
+                "code": "C",
+                "allowedQuantities": ["0", "1", "1.5", "2"]
+              },
+              {
+                "name": "Pepperoni",
+                "code": "P",
+                "allowedQuantities": ["0", "0.5", "1", "1.5", "2"]
+              },
+              {
+                "name": "Italian Sausage",
+                "code": "S",
+                "allowedQuantities": ["0", "0.5", "1", "1.5", "2"]
+              },
+              {
+                "name": "Beef",
+                "code": "B",
+                "allowedQuantities": ["0", "0.5", "1", "1.5", "2"]
+              },
+              {
+                "name": "Ham",
+                "code": "H",
+                "allowedQuantities": ["0", "0.5", "1", "1.5", "2"]
+              },
+              {
+                "name": "Bacon",
+                "code": "K",
+                "allowedQuantities": ["0", "0.5", "1", "1.5", "2"]
+              },
+              {
+                "name": "Mushrooms",
+                "code": "M",
+                "allowedQuantities": ["0", "0.5", "1", "1.5", "2"]
+              },
+              {
+                "name": "Onions",
+                "code": "O",
+                "allowedQuantities": ["0", "0.5", "1", "1.5", "2"]
+              },
+              {
+                "name": "Green Peppers",
+                "code": "G",
+                "allowedQuantities": ["0", "0.5", "1", "1.5", "2"]
+              }
+            ],
+            "sauces": [
+              {
+                "name": "Robust Inspired Tomato Sauce",
+                "code": "X",
+                "allowedQuantities": ["0", "0.5", "1", "1.5"]
+              },
+              {
+                "name": "Marinara Sauce",
+                "code": "Xm",
+                "allowedQuantities": ["0", "0.5", "1", "1.5"]
+              },
+              {
+                "name": "BBQ Sauce",
+                "code": "Bq",
+                "allowedQuantities": ["0", "1"]
+              },
+              {
+                "name": "White Sauce",
+                "code": "Xw",
+                "allowedQuantities": ["0", "0.5", "1", "1.5"]
+              }
+            ],
+            "crusts": [
+              { "name": "Hand Tossed", "code": "HANDTOSS" },
+              { "name": "Thin", "code": "THIN" },
+              { "name": "Pan", "code": "PAN" },
+              { "name": "Brooklyn Style", "code": "BK" }
+            ]
           }
         },
-        ...
+        {
+          "code": "14SCREEN",
+          "name": "Medium Hand Tossed Pizza",
+          "description": "Hand Tossed Pizza with a rich, buttery taste",
+          "basePrice": 11.99,
+          "options": {
+            "toppings": [
+              {
+                "name": "Cheese",
+                "code": "C",
+                "allowedQuantities": ["0", "1", "1.5", "2"]
+              },
+              {
+                "name": "Pepperoni",
+                "code": "P",
+                "allowedQuantities": ["0", "0.5", "1", "1.5", "2"]
+              },
+              {
+                "name": "Italian Sausage",
+                "code": "S",
+                "allowedQuantities": ["0", "0.5", "1", "1.5", "2"]
+              }
+              // Additional toppings similar to above
+            ],
+            "sauces": [
+              {
+                "name": "Robust Inspired Tomato Sauce",
+                "code": "X",
+                "allowedQuantities": ["0", "0.5", "1", "1.5"]
+              },
+              {
+                "name": "Marinara Sauce",
+                "code": "Xm",
+                "allowedQuantities": ["0", "0.5", "1", "1.5"]
+              }
+              // Additional sauces similar to above
+            ],
+            "crusts": [
+              { "name": "Hand Tossed", "code": "HANDTOSS" },
+              { "name": "Thin", "code": "THIN" },
+              { "name": "Pan", "code": "PAN" }
+            ]
+          }
+        }
       ]
     },
-    ...
-  ]
+    {
+      "name": "Sides",
+      "items": [
+        {
+          "code": "B8PCDD",
+          "name": "8-Piece Chicken Wings",
+          "description": "Marinated and oven-baked to perfection",
+          "basePrice": 8.99,
+          "options": {
+            "flavors": [
+              { "name": "Hot Buffalo", "code": "HOTWINGS" },
+              { "name": "Mild Buffalo", "code": "MILDWING" },
+              { "name": "BBQ", "code": "BBQW" },
+              { "name": "Plain", "code": "PLNWINGS" }
+            ],
+            "dips": [
+              { "name": "Ranch", "code": "RANCH" },
+              { "name": "Blue Cheese", "code": "BLUECHS" }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "toppingCodes": {
+    "mapping": "See 'Topping and Option Codes' section for details on how to use these codes when adding items to an order"
+  }
 }
 ```
 
@@ -589,6 +815,8 @@ sessionState.orders[orderId] = order;
 }
 ```
 
+> See the "Topping and Option Codes" section for a detailed explanation of the option coding system.
+
 **Server-Side Processing**:
 
 1. Retrieve order from session state
@@ -630,9 +858,7 @@ sessionState.orders[orderId] = order;
       "code": "16SCREEN",
       "name": "Large Hand Tossed Pizza",
       "options": {
-        "cheese": "Extra Cheese",
-        "toppings": "Double Pepperoni on Half",
-        "sauce": "Normal Tomato Sauce"
+        ...
       },
       "quantity": 1
     }
