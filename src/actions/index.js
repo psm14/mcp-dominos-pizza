@@ -1,8 +1,10 @@
 /**
  * Actions Registration
  *
- * Registers all MCP actions with the server
+ * Registers all MCP tools with the server
  */
+
+import { z } from "zod";
 
 // Import all action handlers
 import { findNearbyStores } from "./findNearbyStores.js";
@@ -15,227 +17,179 @@ import { placeOrder } from "./placeOrder.js";
 import { trackOrder } from "./trackOrder.js";
 
 /**
- * Register all actions with the MCP server
+ * Register all tools with the MCP server
  *
  * @param {Object} server - MCP server instance
  * @param {Object} sessionManager - Session manager instance
  */
-export function registerActions(server, sessionManager) {
-  // Find nearby stores action
-  server.registerAction(
+export async function registerActions(server, sessionManager) {
+  // Find nearby stores tool
+  server.tool(
+    "findNearbyStores",
+    "Find Domino's Pizza stores near an address",
     {
-      name: "findNearbyStores",
-      description: "Find Domino's Pizza stores near an address",
-      parameters: {
-        type: "object",
-        properties: {
-          address: {
-            type: "string",
-            description: "Full address to search for nearby stores",
-          },
-        },
-        required: ["address"],
-      },
+      address: z.string().describe("Full address to search for nearby stores"),
     },
-    (params) => findNearbyStores(params, sessionManager)
+    async (params) => {
+      const result = await findNearbyStores(params, sessionManager);
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
   );
 
-  // Get menu action
-  server.registerAction(
+  // Get menu tool
+  server.tool(
+    "getMenu",
+    "Get the menu for a specific Domino's store",
     {
-      name: "getMenu",
-      description: "Get the menu for a specific Domino's store",
-      parameters: {
-        type: "object",
-        properties: {
-          storeId: {
-            type: "string",
-            description: "ID of the store to get menu from",
-          },
-        },
-        required: ["storeId"],
-      },
+      storeId: z.string().describe("ID of the store to get menu from"),
     },
-    (params) => getMenu(params, sessionManager)
+    async (params) => {
+      const result = await getMenu(params, sessionManager);
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
   );
 
-  // Create order action
-  server.registerAction(
+  // Create order tool
+  server.tool(
+    "createOrder",
+    "Create a new pizza order",
     {
-      name: "createOrder",
-      description: "Create a new pizza order",
-      parameters: {
-        type: "object",
-        properties: {
-          storeId: {
-            type: "string",
-            description: "ID of the store to order from",
-          },
-          orderType: {
-            type: "string",
-            enum: ["delivery", "carryout"],
-            description: "Type of order - delivery or carryout",
-            default: "delivery",
-          },
-          customer: {
-            type: "object",
-            properties: {
-              firstName: { type: "string" },
-              lastName: { type: "string" },
-              email: { type: "string" },
-              phone: { type: "string" },
-              address: {
-                type: "string",
-                description:
-                  "Full address for delivery orders, can be omitted for carryout",
-              },
-            },
-            required: ["firstName", "lastName", "phone"],
-          },
-        },
-        required: ["storeId", "customer", "orderType"],
-      },
+      storeId: z.string().describe("ID of the store to order from"),
+      orderType: z
+        .enum(["delivery", "carryout"])
+        .describe("Type of order - delivery or carryout")
+        .default("delivery"),
+      customer: z
+        .object({
+          firstName: z.string(),
+          lastName: z.string(),
+          email: z.string().optional(),
+          phone: z.string(),
+          address: z
+            .string()
+            .describe(
+              "Full address for delivery orders, can be omitted for carryout"
+            )
+            .optional(),
+        })
+        .describe("Customer information"),
     },
-    (params) => createOrder(params, sessionManager)
+    async (params) => {
+      const result = await createOrder(params, sessionManager);
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
   );
 
-  // Add item to order action
-  server.registerAction(
+  // Add item to order tool
+  server.tool(
+    "addItemToOrder",
+    "Add an item to an existing order",
     {
-      name: "addItemToOrder",
-      description: "Add an item to an existing order",
-      parameters: {
-        type: "object",
-        properties: {
-          orderId: {
-            type: "string",
-            description: "ID of the order to add item to",
-          },
-          item: {
-            type: "object",
-            properties: {
-              code: {
-                type: "string",
-                description:
-                  "Menu code for the item (e.g., '14SCREEN' for large hand tossed pizza)",
-              },
-              options: {
-                type: "object",
-                description:
-                  "Customization options for the item using single-letter codes from Domino's menu toppings",
-              },
-              quantity: {
-                type: "integer",
-                default: 1,
-                description: "Number of this item to add",
-              },
-            },
-            required: ["code"],
-          },
-        },
-        required: ["orderId", "item"],
-      },
+      orderId: z.string().describe("ID of the order to add item to"),
+      item: z
+        .object({
+          code: z
+            .string()
+            .describe(
+              "Menu code for the item (e.g., '14SCREEN' for large hand tossed pizza)"
+            ),
+          options: z
+            .record(z.any())
+            .describe(
+              "Customization options for the item using single-letter codes from Domino's menu toppings"
+            )
+            .optional(),
+          quantity: z
+            .number()
+            .int()
+            .default(1)
+            .describe("Number of this item to add"),
+        })
+        .describe("Item to add to the order"),
     },
-    (params) => addItemToOrder(params, sessionManager)
+    async (params) => {
+      const result = await addItemToOrder(params, sessionManager);
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
   );
 
-  // Validate order action
-  server.registerAction(
+  // Validate order tool
+  server.tool(
+    "validateOrder",
+    "Validate an order before placing it",
     {
-      name: "validateOrder",
-      description: "Validate an order before placing it",
-      parameters: {
-        type: "object",
-        properties: {
-          orderId: {
-            type: "string",
-            description: "ID of the order to validate",
-          },
-        },
-        required: ["orderId"],
-      },
+      orderId: z.string().describe("ID of the order to validate"),
     },
-    (params) => validateOrder(params, sessionManager)
+    async (params) => {
+      const result = await validateOrder(params, sessionManager);
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
   );
 
-  // Price order action
-  server.registerAction(
+  // Price order tool
+  server.tool(
+    "priceOrder",
+    "Price an order to get total cost",
     {
-      name: "priceOrder",
-      description: "Price an order to get total cost",
-      parameters: {
-        type: "object",
-        properties: {
-          orderId: {
-            type: "string",
-            description: "ID of the order to price",
-          },
-        },
-        required: ["orderId"],
-      },
+      orderId: z.string().describe("ID of the order to price"),
     },
-    (params) => priceOrder(params, sessionManager)
+    async (params) => {
+      const result = await priceOrder(params, sessionManager);
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
   );
 
-  // Place order action
-  server.registerAction(
+  // Place order tool
+  server.tool(
+    "placeOrder",
+    "Place an order with payment information",
     {
-      name: "placeOrder",
-      description: "Place an order with payment information",
-      parameters: {
-        type: "object",
-        properties: {
-          orderId: {
-            type: "string",
-            description: "ID of the order to place",
-          },
-          payment: {
-            type: "object",
-            properties: {
-              type: {
-                type: "string",
-                enum: ["credit", "cash"],
-                description: "Payment method",
-              },
-              cardNumber: { type: "string" },
-              expiration: { type: "string" },
-              securityCode: { type: "string" },
-              postalCode: { type: "string" },
-              tipAmount: { type: "number" },
-            },
-            required: ["type"],
-          },
-        },
-        required: ["orderId", "payment"],
-      },
+      orderId: z.string().describe("ID of the order to place"),
+      payment: z
+        .object({
+          type: z.enum(["credit", "cash"]).describe("Payment method"),
+          cardNumber: z.string().optional(),
+          expiration: z.string().optional(),
+          securityCode: z.string().optional(),
+          postalCode: z.string().optional(),
+          tipAmount: z.number().optional(),
+        })
+        .describe("Payment information"),
     },
-    (params) => placeOrder(params, sessionManager)
+    async (params) => {
+      const result = await placeOrder(params, sessionManager);
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
   );
 
-  // Track order action
-  server.registerAction(
+  // Track order tool
+  server.tool(
+    "trackOrder",
+    "Track the status of an order",
     {
-      name: "trackOrder",
-      description: "Track the status of an order",
-      parameters: {
-        type: "object",
-        properties: {
-          phoneNumber: {
-            type: "string",
-            description: "Phone number used for the order",
-          },
-          storeId: {
-            type: "string",
-            description: "ID of the store the order was placed at",
-          },
-          orderId: {
-            type: "string",
-            description: "Optional order ID if available",
-          },
-        },
-        required: ["phoneNumber", "storeId"],
-      },
+      phoneNumber: z.string().describe("Phone number used for the order"),
+      storeId: z.string().describe("ID of the store the order was placed at"),
+      orderId: z.string().describe("Optional order ID if available").optional(),
     },
-    (params) => trackOrder(params, sessionManager)
+    async (params) => {
+      const result = await trackOrder(params, sessionManager);
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
   );
 }

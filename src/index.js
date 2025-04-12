@@ -6,22 +6,30 @@
  * A Model Context Protocol server for interacting with the Domino's Pizza API
  */
 
-import { createMCPServer } from "./utils/mcpServer.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { registerActions } from "./actions/index.js";
 import { createSessionManager } from "./utils/sessionManager.js";
 
-// Initialize the session manager for tracking state
-const sessionManager = createSessionManager();
+async function main() {
+  // Initialize the session manager for tracking state
+  const sessionManager = createSessionManager();
 
-// Initialize the MCP server
-const server = createMCPServer({
-  name: "Domino's Pizza MCP",
-  description: "Order and track Domino's Pizza through natural language",
-  version: "1.0.0",
+  // Initialize the MCP server
+  const server = new McpServer({
+    name: "Domino's Pizza MCP",
+    version: "1.0.0",
+  });
+
+  // Register all the tools with the server
+  await registerActions(server, sessionManager);
+
+  // Start the MCP server with stdio transport
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+}
+
+main().catch((error) => {
+  console.error("Server error:", error);
+  process.exit(1);
 });
-
-// Register all the actions with the server
-registerActions(server, sessionManager);
-
-// Start the MCP server
-server.start();

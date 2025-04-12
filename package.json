@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "start": "node src/index.js",
-    "test": "node --test test"
+    "test": "node --test test/integration"
   },
   "keywords": [
     "mcp",
@@ -20,8 +20,10 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.9.0",
     "dominos": "^3.3.1",
-    "uuid": "^9.0.1"
+    "uuid": "^9.0.1",
+    "zod": "^3.24.2"
   },
   "bin": {
     "mcp-dominos-pizza": "./src/index.js"
