@@ -29,40 +29,57 @@ export async function getMenu(params, sessionManager) {
     // Process menu categories for easier browsing
     const categories = [];
 
-    // Process pizzas
-    const pizzas = menu.getFoodCategory("Pizza");
-    if (pizzas && pizzas.length > 0) {
-      categories.push({
-        name: "Pizzas",
-        items: processMenuItems(pizzas, menu),
-      });
-    }
+    // Access the raw menu data structure
+    const menuData = menu.dominosAPIResponse;
 
-    // Process sides
-    const sides = menu.getFoodCategory("Sides");
-    if (sides && sides.length > 0) {
-      categories.push({
-        name: "Sides",
-        items: processMenuItems(sides, menu),
-      });
-    }
+    // Check if we have products to categorize
+    if (menuData && menuData.Products) {
+      // Group products by category
+      const categorizedProducts = {};
 
-    // Process drinks
-    const drinks = menu.getFoodCategory("Drinks");
-    if (drinks && drinks.length > 0) {
-      categories.push({
-        name: "Drinks",
-        items: processMenuItems(drinks, menu),
+      // Iterate through all products and categorize them
+      Object.values(menuData.Products).forEach((product) => {
+        const category = product.ProductType || "Other";
+        if (!categorizedProducts[category]) {
+          categorizedProducts[category] = [];
+        }
+        categorizedProducts[category].push(product);
       });
-    }
 
-    // Process desserts
-    const desserts = menu.getFoodCategory("Dessert");
-    if (desserts && desserts.length > 0) {
-      categories.push({
-        name: "Desserts",
-        items: processMenuItems(desserts, menu),
-      });
+      // Add pizza category if available
+      if (categorizedProducts.Pizza && categorizedProducts.Pizza.length > 0) {
+        categories.push({
+          name: "Pizzas",
+          items: processMenuItems(categorizedProducts.Pizza, menuData),
+        });
+      }
+
+      // Add sides category if available
+      if (categorizedProducts.Sides && categorizedProducts.Sides.length > 0) {
+        categories.push({
+          name: "Sides",
+          items: processMenuItems(categorizedProducts.Sides, menuData),
+        });
+      }
+
+      // Add drinks category if available
+      if (categorizedProducts.Drinks && categorizedProducts.Drinks.length > 0) {
+        categories.push({
+          name: "Drinks",
+          items: processMenuItems(categorizedProducts.Drinks, menuData),
+        });
+      }
+
+      // Add desserts category if available
+      if (
+        categorizedProducts.Desserts &&
+        categorizedProducts.Desserts.length > 0
+      ) {
+        categories.push({
+          name: "Desserts",
+          items: processMenuItems(categorizedProducts.Desserts, menuData),
+        });
+      }
     }
 
     // Return the processed menu data
@@ -82,20 +99,23 @@ export async function getMenu(params, sessionManager) {
  * Process menu items to extract relevant information
  *
  * @param {Array} items - Menu items
- * @param {Object} menu - Full menu object
+ * @param {Object} menuData - Full menu data object
  * @returns {Array} Processed menu items
  */
-function processMenuItems(items, menu) {
+function processMenuItems(items, menuData) {
   return items.map((item) => {
     // Extract available toppings
     const options = {};
 
     if (item.AvailableToppings) {
-      options.toppings = parseAvailableToppings(item.AvailableToppings, menu);
+      options.toppings = parseAvailableToppings(
+        item.AvailableToppings,
+        menuData
+      );
     }
 
     if (item.AvailableSides) {
-      options.sides = parseAvailableSides(item.AvailableSides, menu);
+      options.sides = parseAvailableSides(item.AvailableSides, menuData);
     }
 
     // Return formatted item
@@ -103,7 +123,7 @@ function processMenuItems(items, menu) {
       code: item.Code,
       name: item.Name,
       description: item.Description || "",
-      basePrice: parseFloat(item.Price),
+      basePrice: parseFloat(item.Price || "0"),
       options,
     };
   });

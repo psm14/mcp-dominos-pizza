@@ -547,16 +547,50 @@ sessionState.stores = deliveryStores;
 // Fetch the full menu for the selected store
 const menu = await new Menu(sessionState.selectedStoreId);
 
+// Save the raw menu data in the session for later use
+sessionManager.setMenu(menu);
+
 // Process menu categories for easier browsing
-const processedMenu = {
-  pizzas: menu.getFoodCategory("Pizza"),
-  sides: menu.getFoodCategory("Sides"),
-  drinks: menu.getFoodCategory("Drinks"),
-  desserts: menu.getFoodCategory("Dessert"),
-};
+const categories = [];
+
+// Access the raw menu data structure
+const menuData = menu.dominosAPIResponse;
+
+// Check if we have products to categorize
+if (menuData && menuData.Products) {
+  // Group products by category
+  const categorizedProducts = {};
+
+  // Iterate through all products and categorize them
+  Object.values(menuData.Products).forEach((product) => {
+    const category = product.ProductType || "Other";
+    if (!categorizedProducts[category]) {
+      categorizedProducts[category] = [];
+    }
+    categorizedProducts[category].push(product);
+  });
+
+  // Add pizza category if available
+  if (categorizedProducts.Pizza && categorizedProducts.Pizza.length > 0) {
+    categories.push({
+      name: "Pizzas",
+      items: processMenuItems(categorizedProducts.Pizza, menuData),
+    });
+  }
+
+  // Add sides category if available
+  if (categorizedProducts.Sides && categorizedProducts.Sides.length > 0) {
+    categories.push({
+      name: "Sides",
+      items: processMenuItems(categorizedProducts.Sides, menuData),
+    });
+  }
+
+  // Add drinks and desserts categories similarly...
+}
 
 // Save to session state
-sessionState.menu = processedMenu;
+sessionState.processedMenu = categories;
 ```
 
 **MCP Response**:
@@ -619,34 +653,6 @@ sessionState.menu = processedMenu;
                 "code": "G",
                 "allowedQuantities": ["0", "0.5", "1", "1.5", "2"]
               }
-            ],
-            "sauces": [
-              {
-                "name": "Robust Inspired Tomato Sauce",
-                "code": "X",
-                "allowedQuantities": ["0", "0.5", "1", "1.5"]
-              },
-              {
-                "name": "Marinara Sauce",
-                "code": "Xm",
-                "allowedQuantities": ["0", "0.5", "1", "1.5"]
-              },
-              {
-                "name": "BBQ Sauce",
-                "code": "Bq",
-                "allowedQuantities": ["0", "1"]
-              },
-              {
-                "name": "White Sauce",
-                "code": "Xw",
-                "allowedQuantities": ["0", "0.5", "1", "1.5"]
-              }
-            ],
-            "crusts": [
-              { "name": "Hand Tossed", "code": "HANDTOSS" },
-              { "name": "Thin", "code": "THIN" },
-              { "name": "Pan", "code": "PAN" },
-              { "name": "Brooklyn Style", "code": "BK" }
             ]
           }
         },
@@ -673,24 +679,6 @@ sessionState.menu = processedMenu;
                 "allowedQuantities": ["0", "0.5", "1", "1.5", "2"]
               }
               // Additional toppings similar to above
-            ],
-            "sauces": [
-              {
-                "name": "Robust Inspired Tomato Sauce",
-                "code": "X",
-                "allowedQuantities": ["0", "0.5", "1", "1.5"]
-              },
-              {
-                "name": "Marinara Sauce",
-                "code": "Xm",
-                "allowedQuantities": ["0", "0.5", "1", "1.5"]
-              }
-              // Additional sauces similar to above
-            ],
-            "crusts": [
-              { "name": "Hand Tossed", "code": "HANDTOSS" },
-              { "name": "Thin", "code": "THIN" },
-              { "name": "Pan", "code": "PAN" }
             ]
           }
         }
@@ -705,15 +693,17 @@ sessionState.menu = processedMenu;
           "description": "Marinated and oven-baked to perfection",
           "basePrice": 8.99,
           "options": {
-            "flavors": [
-              { "name": "Hot Buffalo", "code": "HOTWINGS" },
-              { "name": "Mild Buffalo", "code": "MILDWING" },
-              { "name": "BBQ", "code": "BBQW" },
-              { "name": "Plain", "code": "PLNWINGS" }
-            ],
-            "dips": [
-              { "name": "Ranch", "code": "RANCH" },
-              { "name": "Blue Cheese", "code": "BLUECHS" }
+            "sides": [
+              {
+                "name": "Ranch Dipping Cup",
+                "code": "RANCH",
+                "allowedQuantities": ["0", "1", "2"]
+              },
+              {
+                "name": "Blue Cheese Dipping Cup",
+                "code": "BLUECHS",
+                "allowedQuantities": ["0", "1", "2"]
+              }
             ]
           }
         }
