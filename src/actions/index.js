@@ -11,6 +11,8 @@ import { findNearbyStores } from "./findNearbyStores.js";
 import { getMenu } from "./getMenu.js";
 import { createOrder } from "./createOrder.js";
 import { addItemToOrder } from "./addItemToOrder.js";
+import { removeItemFromOrder } from "./removeItemFromOrder.js"; // Added import
+import { getOrderState } from "./getOrderState.js"; // Added import
 import { validateOrder } from "./validateOrder.js";
 import { priceOrder } from "./priceOrder.js";
 import { placeOrder } from "./placeOrder.js";
@@ -70,11 +72,21 @@ export async function registerActions(server, sessionManager) {
           email: z.string().optional(),
           phone: z.string(),
           address: z
-            .string()
+            .object({
+              street: z.string(), // Made required
+              streetName: z.string().optional(),
+              streetNumber: z.string().optional(),
+              unitType: z.string().optional(),
+              unitNumber: z.string().optional(),
+              city: z.string(), // Made required
+              region: z.string(), // Made required
+              postalCode: z.string(), // Made required
+              deliveryInstructions: z.string().optional(),
+            })
             .describe(
-              "Full address for delivery orders, can be omitted for carryout"
+              "Address object. Required for delivery orders. For carryout orders paid by credit card, this address is used as the billing address and is required."
             )
-            .optional(),
+            .optional(), // Keep the whole address object optional for carryout without CC
         })
         .describe("Customer information"),
     },
@@ -94,15 +106,11 @@ export async function registerActions(server, sessionManager) {
       orderId: z.string().describe("ID of the order to add item to"),
       item: z
         .object({
-          code: z
-            .string()
-            .describe(
-              "Menu code for the item (e.g., '14SCREEN' for large hand tossed pizza)"
-            ),
+          code: z.string().describe("Menu code for the item"),
           options: z
             .record(z.any())
             .describe(
-              "Customization options for the item using single-letter codes from Domino's menu toppings"
+              "Customization options using single-letter codes (e.g., 'P' for Pepperoni). Format: { 'ToppingCode': { 'Portion': 'Quantity' } }. Portions: '1/1' (whole), '1/2' (left), '2/2' (right). Quantities: '0.5' (light), '1' (normal), '1.5' (extra), '2' (double). Example: { 'P': { '1/2': '1.5' } } for extra pepperoni on the left half."
             )
             .optional(),
           quantity: z
@@ -115,6 +123,43 @@ export async function registerActions(server, sessionManager) {
     },
     async (params) => {
       const result = await addItemToOrder(params, sessionManager);
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+  );
+
+  // Register removeItemFromOrder tool
+  server.tool(
+    "removeItemFromOrder", // Reverted name
+    "Remove an item from an existing order",
+    {
+      orderId: z.string().describe("ID of the order to remove item from"),
+      itemIndex: z
+        .number()
+        .int()
+        .nonnegative()
+        .describe(
+          "Zero-based index of the item to remove from the order's list"
+        ),
+    },
+    async (params) => {
+      const result = await removeItemFromOrder(params, sessionManager);
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+  );
+
+  // Register getOrderState tool
+  server.tool(
+    "getOrderState", // Reverted name
+    "Get the current state of an order from the session",
+    {
+      orderId: z.string().describe("ID of the order to retrieve state for"),
+    },
+    async (params) => {
+      const result = await getOrderState(params, sessionManager);
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
       };
@@ -163,7 +208,10 @@ export async function registerActions(server, sessionManager) {
           cardNumber: z.string().optional(),
           expiration: z.string().optional(),
           securityCode: z.string().optional(),
-          postalCode: z.string().optional(),
+          postalCode: z
+            .string()
+            .describe("Billing postal code for credit card payments.")
+            .optional(),
           tipAmount: z.number().optional(),
         })
         .describe("Payment information"),

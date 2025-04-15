@@ -161,10 +161,10 @@ The following MCP actions will be supported:
           "phone": { "type": "string" },
           "address": {
             "type": "string",
-            "description": "Full address for delivery orders, can be omitted for carryout"
+            "description": "Full address. Required for delivery orders. For carryout orders paid by credit card, this address is used as the billing address and is required."
           }
         },
-        "required": ["firstName", "lastName", "phone"]
+        "required": ["firstName", "lastName", "phone"] // Address becomes conditionally required based on order/payment type
       }
     },
     "required": ["storeId", "customer", "orderType"]
@@ -272,40 +272,16 @@ The following MCP actions will be supported:
           "cardNumber": { "type": "string" },
           "expiration": { "type": "string" },
           "securityCode": { "type": "string" },
-          "postalCode": { "type": "string" },
+          "postalCode": {
+            "type": "string",
+            "description": "Billing postal code for credit card payments."
+          },
           "tipAmount": { "type": "number" }
         },
-        "required": ["type"]
+        "required": ["type"] // Card details are required if type is 'credit'
       }
     },
     "required": ["orderId", "payment"]
-  }
-}
-```
-
-#### 3.1.8 `trackOrder`
-
-```json
-{
-  "name": "trackOrder",
-  "description": "Track the status of an order",
-  "parameters": {
-    "type": "object",
-    "properties": {
-      "phoneNumber": {
-        "type": "string",
-        "description": "Phone number used for the order"
-      },
-      "storeId": {
-        "type": "string",
-        "description": "ID of the store the order was placed at"
-      },
-      "orderId": {
-        "type": "string",
-        "description": "Optional order ID if available"
-      }
-    },
-    "required": ["phoneNumber", "storeId"]
   }
 }
 ```
@@ -985,7 +961,7 @@ try {
 **Server-Side Processing**:
 
 1. Retrieve order from session state
-2. Create Payment object
+2. Create Payment object using the dominos package, ensuring billing address details (from customer object) and postal code are included for credit card payments.
 3. Add payment to order
 4. Call place method on the order
 5. Update session state with order confirmation
@@ -997,33 +973,43 @@ try {
 const order = sessionState.orders[orderId];
 
 // Create payment object
+const paymentInfo = parameters.payment;
+const customerInfo = order.Customer; // Retrieve customer info stored in the order
+
 const payment = new Payment({
-  amount: order.amountsBreakdown.customer,
-  number: "4100123422343234",
-  expiration: "01/28",
-  securityCode: "123",
-  postalCode: "93940",
-  tipAmount: 3.5,
+  Type: paymentInfo.type === "credit" ? "CreditCard" : "Cash", // Map to Domino's expected type
+  Amount: order.Amounts.Customer, // Use the priced amount
+  Number: paymentInfo.cardNumber,
+  Expiration: paymentInfo.expiration,
+  SecurityCode: paymentInfo.securityCode,
+  PostalCode: paymentInfo.postalCode, // Billing postal code
+  TipAmount: paymentInfo.tipAmount,
+
+  // Include billing address details for credit card payments
+  // Assumes the address stored in the customer object is the billing address
+  ...(paymentInfo.type === "credit" &&
+    customerInfo.Address && {
+      CardType: order.validate().allowedCards[0], // Use the first allowed card type (needs refinement)
+      Address: customerInfo.Address.street, // Assuming Address object structure
+      City: customerInfo.Address.city,
+      Region: customerInfo.Address.region,
+      // PostalCode is already included above
+    }),
 });
 
-// Add payment to order
-order.payments.push(payment);
+// Add payment to the order
+order.addPayment(payment);
 
 try {
   // Place the order with Domino's API
   await order.place();
-
-  // Extract order confirmation details
-  const confirmation = {
-    orderID: order.orderID,
-    estimatedWaitMinutes: order.estimatedWaitMinutes,
-    status: order.status,
-  };
-
-  sessionState.orderConfirmation = confirmation;
-  sessionState.orders[orderId] = order;
+  sessionState.orderConfirmation = order.details; // Store confirmation details
+  sessionState.orderStatus = "placed";
 } catch (error) {
   sessionState.orderErrors = error;
+  sessionState.orderStatus = "placement_failed";
+  // Rethrow or handle error appropriately
+  throw new Error(`Failed to place order: ${error.message}`);
 }
 ```
 
