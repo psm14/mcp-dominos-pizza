@@ -32,9 +32,8 @@ export async function getOrderState(params, sessionManager) {
         lastName: order.lastName,
         email: order.email,
         phone: order.phone,
-        // Include address only if it exists (relevant for delivery)
-        ...(order.address && { address: order.address.toString() }), // Assuming address object has toString()
       },
+      address: order.address,
       items: order.products.map((item, index) => ({
         index: index, // Add index for easy reference (e.g., for removal)
         code: item.code,

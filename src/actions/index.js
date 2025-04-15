@@ -71,24 +71,19 @@ export async function registerActions(server, sessionManager) {
           lastName: z.string(),
           email: z.string().optional(),
           phone: z.string(),
-          address: z
-            .object({
-              street: z.string(), // Made required
-              streetName: z.string().optional(),
-              streetNumber: z.string().optional(),
-              unitType: z.string().optional(),
-              unitNumber: z.string().optional(),
-              city: z.string(), // Made required
-              region: z.string(), // Made required
-              postalCode: z.string(), // Made required
-              deliveryInstructions: z.string().optional(),
-            })
-            .describe(
-              "Address object. Required for delivery orders. For carryout orders paid by credit card, this address is used as the billing address and is required."
-            )
-            .optional(), // Keep the whole address object optional for carryout without CC
         })
         .describe("Customer information"),
+      address: z
+        .object({
+          street: z.string(), // Made required
+          city: z.string(), // Made required
+          region: z.string(), // Made required
+          postalCode: z.string(), // Made required
+          deliveryInstructions: z.string().optional(),
+        })
+        .describe(
+          "Address object. Required for delivery orders. For carryout orders paid by credit card, this address is used as the billing address and is required."
+        ),
     },
     async (params) => {
       const result = await createOrder(params, sessionManager);

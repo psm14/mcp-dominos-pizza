@@ -15,15 +15,10 @@ import { Customer, Order, Address } from "dominos";
  */
 export async function createOrder(params, sessionManager) {
   try {
-    const { storeId, customer, orderType = "delivery" } = params;
+    const { storeId, customer, address, orderType = "delivery" } = params;
 
-    // Create customer address if this is a delivery order
-    let address = null;
-    if (orderType === "delivery") {
-      if (!customer.address) {
-        throw new Error("Address is required for delivery orders");
-      }
-      address = new Address(customer.address);
+    if (!address) {
+      throw new Error("Address is required even for carry out orders");
     }
 
     // Create the customer object
@@ -32,13 +27,14 @@ export async function createOrder(params, sessionManager) {
       lastName: customer.lastName,
       phone: customer.phone,
       email: customer.email || undefined,
-      address: address || undefined,
     };
 
     const dominosCustomer = new Customer(customerData);
 
     // Create a new order
     const order = new Order(dominosCustomer);
+
+    order.address = new Address(address);
 
     // Set the store ID
     order.storeID = storeId;
