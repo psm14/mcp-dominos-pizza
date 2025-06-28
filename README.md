@@ -1,7 +1,7 @@
 # Domino's Pizza MCP Server
 
 > [!WARNING]
-> **THIS PROJECT DOES NOT CURRENTLY WORK** ⚠️
+> **THIS PROJECT DOES NOT CURRENTLY WORK**
 >
 > **The Domino's API requires reCAPTCHA verification when placing orders, and there is no programmatic way to solve reCAPTCHA challenges. This means while you can browse stores, menus, create orders, and validate them, the actual order placement will fail due to the reCAPTCHA requirement.**
 
